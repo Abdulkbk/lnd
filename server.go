@@ -1007,7 +1007,9 @@ func newServer(ctx context.Context, cfg *Config, listenAddrs []net.Addr,
 		PathFindingConfig:   pathFindingConfig,
 	}
 
-	s.controlTower = routing.NewControlTower(dbs.KVPaymentsDB)
+	s.controlTower = routing.NewControlTower(
+		dbs.KVPaymentsDB, cfg.GcFailedPaymentsOnTheFly,
+	)
 
 	strictPruning := cfg.Bitcoin.Node == "neutrino" ||
 		cfg.Routing.StrictZombiePruning
