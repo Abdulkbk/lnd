@@ -513,6 +513,8 @@ func Main() {
 		deletePaymentsCommand,
 		sendCustomCommand,
 		subscribeCustomCommand,
+		sendOnionCommand,
+		subscribeOnionCommand,
 		fishCompletionCommand,
 		listAliasesCommand,
 		estimateRouteFeeCommand,
