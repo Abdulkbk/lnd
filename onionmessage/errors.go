@@ -23,4 +23,18 @@ var (
 
 	// ErrNilResolver is returned when a nil resolver is provided.
 	ErrNilResolver = errors.New("resolver cannot be nil")
+
+	// ErrNoPathFound is returned when no path exists between the source
+	// and destination nodes that supports onion messaging.
+	ErrNoPathFound = errors.New("no path found to destination")
+
+	// ErrDestinationNoOnionSupport is returned when the destination node
+	// does not advertise support for onion messages.
+	ErrDestinationNoOnionSupport = errors.New("destination does not " +
+		"support onion messages")
+
+	// ErrPeerActorNotFound is returned when no peer actor is found for
+	// the first hop node.
+	ErrPeerActorNotFound = errors.New("peer actor not found for " +
+		"first hop")
 )
