@@ -35,6 +35,7 @@ import (
 	"github.com/btcsuite/btcwallet/wallet"
 	"github.com/btcsuite/btcwallet/wallet/txauthor"
 	proxy "github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
+	sphinx "github.com/lightningnetwork/lightning-onion"
 	"github.com/lightningnetwork/lnd/autopilot"
 	"github.com/lightningnetwork/lnd/build"
 	"github.com/lightningnetwork/lnd/chainreg"
@@ -9355,14 +9356,45 @@ func (r *rpcServer) SubscribeCustomMessages(
 	}
 }
 
-// SendOnionMessage sends a custom peer message.
+// SendOnionMessage sends an onion message to a peer. It supports two modes:
+// legacy mode (peer/path_key/onion set) which sends a pre-built onion to a
+// direct peer, and pathfinding mode (destination set) which automatically
+// finds a route through the graph.
 func (r *rpcServer) SendOnionMessage(ctx context.Context,
 	req *lnrpc.SendOnionMessageRequest) (*lnrpc.SendOnionMessageResponse,
 	error) {
 
-	// First we'll validate the string passed in within the request to
-	// ensure that it's a valid hex-string, and also a valid compressed
-	// public key.
+	hasLegacy := len(req.Peer) > 0 || len(req.PathKey) > 0 ||
+		len(req.Onion) > 0
+	hasPathfinding := len(req.Destination) > 0
+
+	// Validate mutual exclusivity.
+	if hasLegacy && hasPathfinding {
+		return nil, status.Error(codes.InvalidArgument,
+			"cannot set both legacy fields (peer/path_key/onion) "+
+				"and destination")
+	}
+
+	if !hasLegacy && !hasPathfinding {
+		return nil, status.Error(codes.InvalidArgument,
+			"must set either peer/path_key/onion or destination")
+	}
+
+	// Pathfinding mode: automatic route discovery and onion construction.
+	if hasPathfinding {
+		return r.sendOnionMessagePathfinding(ctx, req)
+	}
+
+	// Legacy mode: pre-built onion to a direct peer.
+	return r.sendOnionMessageLegacy(ctx, req)
+}
+
+// sendOnionMessageLegacy handles the legacy mode where a pre-built onion is
+// sent to a direct peer.
+func (r *rpcServer) sendOnionMessageLegacy(ctx context.Context,
+	req *lnrpc.SendOnionMessageRequest) (*lnrpc.SendOnionMessageResponse,
+	error) {
+
 	pathKey, err := btcec.ParsePubKey(req.PathKey)
 	if err != nil {
 		return nil, fmt.Errorf("unable to decode path key bytes: %w",
@@ -9384,6 +9416,95 @@ func (r *rpcServer) SendOnionMessage(ctx context.Context,
 
 	return &lnrpc.SendOnionMessageResponse{
 		Status: "onion message sent successfully",
+	}, nil
+}
+
+// sendOnionMessagePathfinding handles the pathfinding mode where the system
+// finds a route to the destination and constructs the onion message.
+func (r *rpcServer) sendOnionMessagePathfinding(ctx context.Context,
+	req *lnrpc.SendOnionMessageRequest) (*lnrpc.SendOnionMessageResponse,
+	error) {
+
+	dest, err := route.NewVertexFromBytes(req.Destination)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument,
+			"invalid destination pubkey: %v", err)
+	}
+
+	// Convert final hop TLVs from the RPC map format.
+	var finalHopTLVs []*lnwire.FinalHopTLV
+	for tlvType, value := range req.FinalHopTlvs {
+		finalHopTLVs = append(finalHopTLVs, &lnwire.FinalHopTLV{
+			TLVType: tlv.Type(tlvType),
+			Value:   value,
+		})
+	}
+
+	// Convert optional reply path from RPC format.
+	var replyPath *sphinx.BlindedPath
+	if req.ReplyPath != nil {
+		rp, err := rpcBlindedPathToSphinx(req.ReplyPath)
+		if err != nil {
+			return nil, status.Errorf(codes.InvalidArgument,
+				"invalid reply path: %v", err)
+		}
+		replyPath = rp
+	}
+
+	err = r.server.SendOnionMessageToDestination(
+		ctx, dest, finalHopTLVs, replyPath,
+	)
+	switch {
+	case errors.Is(err, onionmessage.ErrDestinationNotInGraph):
+		return nil, status.Error(codes.NotFound, err.Error())
+	case errors.Is(err, onionmessage.ErrDestinationNoOnionSupport):
+		return nil, status.Error(codes.FailedPrecondition, err.Error())
+	case errors.Is(err, onionmessage.ErrNoPathFound):
+		return nil, status.Error(codes.NotFound, err.Error())
+	case errors.Is(err, onionmessage.ErrPeerActorNotFound):
+		return nil, status.Error(codes.NotFound, err.Error())
+	case err != nil:
+		return nil, err
+	}
+
+	return &lnrpc.SendOnionMessageResponse{
+		Status: "onion message sent successfully",
+	}, nil
+}
+
+// rpcBlindedPathToSphinx converts an lnrpc.BlindedPath to a
+// sphinx.BlindedPath.
+func rpcBlindedPathToSphinx(
+	rpcPath *lnrpc.BlindedPath) (*sphinx.BlindedPath, error) {
+
+	introNode, err := btcec.ParsePubKey(rpcPath.IntroductionNode)
+	if err != nil {
+		return nil, fmt.Errorf("invalid introduction node: %w", err)
+	}
+
+	blindingPoint, err := btcec.ParsePubKey(rpcPath.BlindingPoint)
+	if err != nil {
+		return nil, fmt.Errorf("invalid blinding point: %w", err)
+	}
+
+	blindedHops := make([]*sphinx.BlindedHopInfo, len(rpcPath.BlindedHops))
+	for i, hop := range rpcPath.BlindedHops {
+		blindedPub, err := btcec.ParsePubKey(hop.BlindedNode)
+		if err != nil {
+			return nil, fmt.Errorf("invalid blinded node at "+
+				"hop %d: %w", i, err)
+		}
+
+		blindedHops[i] = &sphinx.BlindedHopInfo{
+			BlindedNodePub: blindedPub,
+			CipherText:     hop.EncryptedData,
+		}
+	}
+
+	return &sphinx.BlindedPath{
+		IntroductionPoint: introNode,
+		BlindingPoint:     blindingPoint,
+		BlindedHops:       blindedHops,
 	}, nil
 }
 

@@ -5365,9 +5365,66 @@ func (s *server) SendCustomMessage(ctx context.Context, peerPub [33]byte,
 	return peer.SendMessageLazy(true, msg)
 }
 
+// SendOnionMessageToDestination finds a path to the destination node through
+// the channel graph and sends an onion message along that path. If no path is
+// found in the graph, it falls back to sending directly to the destination if
+// it is a connected peer.
+func (s *server) SendOnionMessageToDestination(ctx context.Context,
+	destination route.Vertex, finalHopTLVs []*lnwire.FinalHopTLV,
+	replyPath *sphinx.BlindedPath) error {
+
+	ourPubKey := route.NewVertex(s.identityECDH.PubKey())
+
+	var pathErr error
+	err := s.graphDB.GraphSession(func(graph graphdb.NodeTraverser) error {
+		cfg := &onionmessage.SendConfig{
+			Graph:        graph,
+			OurPubKey:    ourPubKey,
+			Receptionist: s.actorSystem.Receptionist(),
+			MaxHops:      sphinx.NumMaxHops,
+		}
+
+		pathErr = onionmessage.SendToDestination(
+			ctx, cfg, destination, finalHopTLVs, replyPath,
+		)
+
+		return nil
+	}, func() {})
+
+	if err != nil {
+		return err
+	}
+
+	// If pathfinding succeeded, we're done.
+	if pathErr == nil {
+		return nil
+	}
+
+	// If the error is not a path-related failure, return it directly.
+	if !errors.Is(pathErr, onionmessage.ErrNoPathFound) &&
+		!errors.Is(pathErr, onionmessage.ErrDestinationNotInGraph) &&
+		!errors.Is(pathErr, onionmessage.ErrDestinationNoOnionSupport) {
+
+		return pathErr
+	}
+
+	// Fall back to direct send: build a 1-hop blinded path to the
+	// destination and send via peer actor.
+	directPath := &onionmessage.OnionMessagePath{
+		Hops: []route.Vertex{destination},
+	}
+
+	cfg := &onionmessage.SendConfig{
+		Receptionist: s.actorSystem.Receptionist(),
+	}
+
+	return onionmessage.SendDirectToDestination(
+		ctx, cfg, directPath, finalHopTLVs, replyPath,
+	)
+}
+
 // SendOnionMessage sends a custom message to the peer with the specified
 // pubkey.
-// TODO(gijs): change this message to include path finding.
 func (s *server) SendOnionMessage(ctx context.Context, peerPub [33]byte,
 	pathKey *btcec.PublicKey, onion []byte) error {
 

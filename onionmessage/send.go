@@ -64,6 +64,31 @@ func SendToDestination(ctx context.Context, cfg *SendConfig,
 		onionMsg)
 }
 
+// SendDirectToDestination builds a blinded onion message for the given
+// pre-built path (no pathfinding) and sends it to the first hop's peer actor.
+// This is used as a fallback when graph pathfinding fails but the destination
+// may be a directly connected peer.
+func SendDirectToDestination(ctx context.Context, cfg *SendConfig,
+	path *OnionMessagePath, finalHopTLVs []*lnwire.FinalHopTLV,
+	replyPath *sphinx.BlindedPath) error {
+
+	if len(path.Hops) == 0 {
+		return fmt.Errorf("path must have at least one hop")
+	}
+
+	onionMsg, blindingKey, err := buildOnionMessageForPath(
+		path, replyPath, finalHopTLVs,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to build onion message: %w", err)
+	}
+
+	firstHop := path.Hops[0]
+
+	return sendToFirstHop(ctx, cfg.Receptionist, firstHop, blindingKey,
+		onionMsg)
+}
+
 // buildOnionMessageForPath constructs a blinded onion message for the given
 // path. It returns the serialized onion blob and the blinding session public
 // key needed for the first hop.
