@@ -7708,17 +7708,34 @@
         "peer": {
           "type": "string",
           "format": "byte",
-          "title": "Peer to send the message to"
+          "description": "Peer to send the message to. Used in legacy mode together with path_key\nand onion. Mutually exclusive with destination."
         },
         "path_key": {
           "type": "string",
           "format": "byte",
-          "description": "PathKey is used to derive the blinded node id by tweaking the hop's\nstatic public key. The hop uses the corresponding blinded private key\ntogether with the sender's ephemeral key to perform ECDH and obtain the\nshared secret for decrypting the onion payload. Separately, for\ndecrypting `encrypted_recipient_data`, the recipient performs ECDH\nbetween its static node private key and the path_key to derive the\ndecryption key."
+          "description": "PathKey is used to derive the blinded node id by tweaking the hop's\nstatic public key. The hop uses the corresponding blinded private key\ntogether with the sender's ephemeral key to perform ECDH and obtain the\nshared secret for decrypting the onion payload. Separately, for\ndecrypting `encrypted_recipient_data`, the recipient performs ECDH\nbetween its static node private key and the path_key to derive the\ndecryption key. Used in legacy mode together with peer and onion."
         },
         "onion": {
           "type": "string",
           "format": "byte",
-          "description": "Serialized Sphinx onion packet (BOLT 4) containing the layered, per-hop\nencrypted payloads and routing instructions used to forward this message\nalong its designated path."
+          "description": "Serialized Sphinx onion packet (BOLT 4) containing the layered, per-hop\nencrypted payloads and routing instructions used to forward this message\nalong its designated path. Used in legacy mode together with peer and\npath_key."
+        },
+        "destination": {
+          "type": "string",
+          "format": "byte",
+          "description": "The 33-byte compressed public key of the destination node. When set,\npathfinding mode is used: the system will automatically find a route\nthrough the graph and construct the onion message. Mutually exclusive\nwith peer/path_key/onion."
+        },
+        "final_hop_tlvs": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "string",
+            "format": "byte"
+          },
+          "description": "Optional custom TLV records to include in the final hop payload.\nOnly used in pathfinding mode (when destination is set)."
+        },
+        "reply_path": {
+          "$ref": "#/definitions/lnrpcBlindedPath",
+          "description": "Optional reply path for the recipient to respond. Only used in\npathfinding mode (when destination is set)."
         }
       }
     },

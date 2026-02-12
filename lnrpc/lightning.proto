@@ -711,7 +711,8 @@ message OnionMessageUpdate {
 }
 
 message SendOnionMessageRequest {
-    // Peer to send the message to
+    // Peer to send the message to. Used in legacy mode together with path_key
+    // and onion. Mutually exclusive with destination.
     bytes peer = 1;
 
     // PathKey is used to derive the blinded node id by tweaking the hop's
@@ -720,13 +721,28 @@ message SendOnionMessageRequest {
     // shared secret for decrypting the onion payload. Separately, for
     // decrypting `encrypted_recipient_data`, the recipient performs ECDH
     // between its static node private key and the path_key to derive the
-    // decryption key.
+    // decryption key. Used in legacy mode together with peer and onion.
     bytes path_key = 2;
 
     // Serialized Sphinx onion packet (BOLT 4) containing the layered, per-hop
     // encrypted payloads and routing instructions used to forward this message
-    // along its designated path.
+    // along its designated path. Used in legacy mode together with peer and
+    // path_key.
     bytes onion = 3;
+
+    // The 33-byte compressed public key of the destination node. When set,
+    // pathfinding mode is used: the system will automatically find a route
+    // through the graph and construct the onion message. Mutually exclusive
+    // with peer/path_key/onion.
+    bytes destination = 4;
+
+    // Optional custom TLV records to include in the final hop payload.
+    // Only used in pathfinding mode (when destination is set).
+    map<uint64, bytes> final_hop_tlvs = 5;
+
+    // Optional reply path for the recipient to respond. Only used in
+    // pathfinding mode (when destination is set).
+    BlindedPath reply_path = 6;
 }
 
 message SendOnionMessageResponse {
