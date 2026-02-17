@@ -216,6 +216,13 @@ replace github.com/gogo/protobuf => github.com/gogo/protobuf v1.3.2
 // allows us to specify that as an option.
 replace google.golang.org/protobuf => github.com/lightninglabs/protobuf-go-hex-display v1.33.0-hex-display
 
+// This replace fixes a bug where gozmq uses the resolved IP address instead of
+// the original hostname when reconnecting after a disconnection. This causes
+// ZMQ connections to permanently break when the backend's IP changes (e.g.,
+// Kubernetes pod restart, Docker network change).
+// See: https://github.com/lightningnetwork/lnd/issues/9353
+replace github.com/lightninglabs/gozmq => ./gozmq
+
 // If you change this please also update docs/INSTALL.md and GO_VERSION in
 // Makefile (then run `make lint` to see where else it needs to be updated as
 // well).
