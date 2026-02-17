@@ -37,12 +37,24 @@ func SendToDestination(ctx context.Context, cfg *SendConfig,
 	destination route.Vertex, finalHopTLVs []*lnwire.FinalHopTLV,
 	replyPath *sphinx.BlindedPath) error {
 
+	log.Infof("SendToDestination: destination=%s, ourPubKey=%s, "+
+		"maxHops=%d, numFinalHopTLVs=%d, hasReplyPath=%v",
+		destination, cfg.OurPubKey, cfg.MaxHops,
+		len(finalHopTLVs), replyPath != nil)
+
 	// Find the shortest path to the destination.
 	path, err := FindPath(
 		cfg.Graph, cfg.OurPubKey, destination, cfg.MaxHops,
 	)
 	if err != nil {
+		log.Errorf("SendToDestination: FindPath failed: %v", err)
 		return err
+	}
+
+	log.Debugf("SendToDestination: FindPath returned %d hops",
+		len(path.Hops))
+	for i, hop := range path.Hops {
+		log.Debugf("SendToDestination: hop[%d] = %s", i, hop)
 	}
 
 	if len(path.Hops) == 0 {
@@ -54,14 +66,28 @@ func SendToDestination(ctx context.Context, cfg *SendConfig,
 		path, replyPath, finalHopTLVs,
 	)
 	if err != nil {
+		log.Errorf("SendToDestination: buildOnionMessageForPath "+
+			"failed: %v", err)
 		return fmt.Errorf("failed to build onion message: %w", err)
 	}
+
+	log.Debugf("SendToDestination: onion message built successfully, "+
+		"onionBlobLen=%d", len(onionMsg))
 
 	// Send via the first hop's peer actor.
 	firstHop := path.Hops[0]
 
-	return sendToFirstHop(ctx, cfg.Receptionist, firstHop, blindingKey,
+	log.Infof("SendToDestination: sending to firstHop=%s", firstHop)
+
+	err = sendToFirstHop(ctx, cfg.Receptionist, firstHop, blindingKey,
 		onionMsg)
+	if err != nil {
+		log.Errorf("SendToDestination: sendToFirstHop failed: %v", err)
+	} else {
+		log.Infof("SendToDestination: sendToFirstHop succeeded")
+	}
+
+	return err
 }
 
 // SendDirectToDestination builds a blinded onion message for the given
@@ -72,21 +98,45 @@ func SendDirectToDestination(ctx context.Context, cfg *SendConfig,
 	path *OnionMessagePath, finalHopTLVs []*lnwire.FinalHopTLV,
 	replyPath *sphinx.BlindedPath) error {
 
+	log.Infof("SendDirectToDestination: numHops=%d, "+
+		"numFinalHopTLVs=%d, hasReplyPath=%v",
+		len(path.Hops), len(finalHopTLVs), replyPath != nil)
+
 	if len(path.Hops) == 0 {
 		return fmt.Errorf("path must have at least one hop")
+	}
+
+	for i, hop := range path.Hops {
+		log.Debugf("SendDirectToDestination: hop[%d] = %s", i, hop)
 	}
 
 	onionMsg, blindingKey, err := buildOnionMessageForPath(
 		path, replyPath, finalHopTLVs,
 	)
 	if err != nil {
+		log.Errorf("SendDirectToDestination: "+
+			"buildOnionMessageForPath failed: %v", err)
 		return fmt.Errorf("failed to build onion message: %w", err)
 	}
 
+	log.Debugf("SendDirectToDestination: onion message built "+
+		"successfully, onionBlobLen=%d", len(onionMsg))
+
 	firstHop := path.Hops[0]
 
-	return sendToFirstHop(ctx, cfg.Receptionist, firstHop, blindingKey,
+	log.Infof("SendDirectToDestination: sending to firstHop=%s",
+		firstHop)
+
+	err = sendToFirstHop(ctx, cfg.Receptionist, firstHop, blindingKey,
 		onionMsg)
+	if err != nil {
+		log.Errorf("SendDirectToDestination: sendToFirstHop "+
+			"failed: %v", err)
+	} else {
+		log.Infof("SendDirectToDestination: sendToFirstHop succeeded")
+	}
+
+	return err
 }
 
 // buildOnionMessageForPath constructs a blinded onion message for the given
