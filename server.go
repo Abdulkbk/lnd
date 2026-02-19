@@ -5392,6 +5392,8 @@ func (s *server) SendOnionMessageToDestination(ctx context.Context,
 	}, func() {})
 
 	if err != nil {
+		srvrLog.Errorf("Failed to open graph session: %v", err)
+
 		return err
 	}
 
@@ -5407,6 +5409,9 @@ func (s *server) SendOnionMessageToDestination(ctx context.Context,
 
 		return pathErr
 	}
+
+	srvrLog.Infof("Graph path to %s unavailable (%v), falling back "+
+		"to direct send", destination, pathErr)
 
 	// Fall back to direct send: build a 1-hop blinded path to the
 	// destination and send via peer actor.

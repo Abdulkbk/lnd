@@ -37,6 +37,9 @@ func SendToDestination(ctx context.Context, cfg *SendConfig,
 	destination route.Vertex, finalHopTLVs []*lnwire.FinalHopTLV,
 	replyPath *sphinx.BlindedPath) error {
 
+	log.Debugf("Attempting to send onion message to %s via graph",
+		destination)
+
 	// Find the shortest path to the destination.
 	path, err := FindPath(
 		cfg.Graph, cfg.OurPubKey, destination, cfg.MaxHops,
@@ -54,6 +57,9 @@ func SendToDestination(ctx context.Context, cfg *SendConfig,
 		path, replyPath, finalHopTLVs,
 	)
 	if err != nil {
+		log.Errorf("Failed to build onion message for %s: %v",
+			destination, err)
+
 		return fmt.Errorf("failed to build onion message: %w", err)
 	}
 
@@ -76,10 +82,16 @@ func SendDirectToDestination(ctx context.Context, cfg *SendConfig,
 		return fmt.Errorf("path must have at least one hop")
 	}
 
+	log.Debugf("Sending onion message directly to %s",
+		path.Hops[len(path.Hops)-1])
+
 	onionMsg, blindingKey, err := buildOnionMessageForPath(
 		path, replyPath, finalHopTLVs,
 	)
 	if err != nil {
+		log.Errorf("Failed to build direct onion message: %v",
+			err)
+
 		return fmt.Errorf("failed to build onion message: %w", err)
 	}
 

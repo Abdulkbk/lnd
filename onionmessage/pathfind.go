@@ -113,9 +113,15 @@ func FindPath(graph graphdb.NodeTraverser, source, destination route.Vertex,
 
 			// Check if we found the destination.
 			if err == errBFSDone { //nolint:errorlint
-				return reconstructPath(
+				path := reconstructPath(
 					parent, source, destination,
-				), nil
+				)
+
+				log.Debugf("Found path to %s with %d "+
+					"hop(s)", destination,
+					len(path.Hops))
+
+				return path, nil
 			}
 
 			if err != nil {
@@ -125,6 +131,9 @@ func FindPath(graph graphdb.NodeTraverser, source, destination route.Vertex,
 
 		queue = nextQueue
 	}
+
+	log.Debugf("No path found to %s within %d hops",
+		destination, maxHops)
 
 	return nil, ErrNoPathFound
 }
