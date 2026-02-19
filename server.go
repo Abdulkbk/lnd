@@ -5404,7 +5404,6 @@ func (s *server) SendOnionMessageToDestination(ctx context.Context,
 
 	// If the error is not a path-related failure, return it directly.
 	if !errors.Is(pathErr, onionmessage.ErrNoPathFound) &&
-		!errors.Is(pathErr, onionmessage.ErrDestinationNotInGraph) &&
 		!errors.Is(pathErr, onionmessage.ErrDestinationNoOnionSupport) {
 
 		return pathErr

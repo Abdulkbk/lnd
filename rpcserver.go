@@ -9455,8 +9455,6 @@ func (r *rpcServer) sendOnionMessagePathfinding(ctx context.Context,
 		ctx, dest, finalHopTLVs, replyPath,
 	)
 	switch {
-	case errors.Is(err, onionmessage.ErrDestinationNotInGraph):
-		return nil, status.Error(codes.NotFound, err.Error())
 	case errors.Is(err, onionmessage.ErrDestinationNoOnionSupport):
 		return nil, status.Error(codes.FailedPrecondition, err.Error())
 	case errors.Is(err, onionmessage.ErrNoPathFound):
