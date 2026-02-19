@@ -5375,17 +5375,8 @@ func (s *server) SendOnionMessageToDestination(ctx context.Context,
 
 	ourPubKey := route.NewVertex(s.identityECDH.PubKey())
 
-	srvrLog.Infof("SendOnionMessageToDestination: starting, "+
-		"destination=%s, ourPubKey=%s, numFinalHopTLVs=%d, "+
-		"hasReplyPath=%v", destination, ourPubKey,
-		len(finalHopTLVs), replyPath != nil)
-
 	var pathErr error
 	err := s.graphDB.GraphSession(func(graph graphdb.NodeTraverser) error {
-		srvrLog.Debugf("SendOnionMessageToDestination: inside "+
-			"graph session, attempting graph-based path to %s",
-			destination)
-
 		cfg := &onionmessage.SendConfig{
 			Graph:        graph,
 			OurPubKey:    ourPubKey,
@@ -5397,22 +5388,15 @@ func (s *server) SendOnionMessageToDestination(ctx context.Context,
 			ctx, cfg, destination, finalHopTLVs, replyPath,
 		)
 
-		srvrLog.Debugf("SendOnionMessageToDestination: "+
-			"SendToDestination returned pathErr=%v", pathErr)
-
 		return nil
 	}, func() {})
 
 	if err != nil {
-		srvrLog.Errorf("SendOnionMessageToDestination: graph "+
-			"session error: %v", err)
 		return err
 	}
 
 	// If pathfinding succeeded, we're done.
 	if pathErr == nil {
-		srvrLog.Infof("SendOnionMessageToDestination: successfully "+
-			"sent via graph path to %s", destination)
 		return nil
 	}
 
@@ -5421,14 +5405,8 @@ func (s *server) SendOnionMessageToDestination(ctx context.Context,
 		!errors.Is(pathErr, onionmessage.ErrDestinationNotInGraph) &&
 		!errors.Is(pathErr, onionmessage.ErrDestinationNoOnionSupport) {
 
-		srvrLog.Errorf("SendOnionMessageToDestination: non-path "+
-			"error from SendToDestination: %v", pathErr)
 		return pathErr
 	}
-
-	srvrLog.Infof("SendOnionMessageToDestination: graph path "+
-		"failed (err=%v), falling back to direct send to %s",
-		pathErr, destination)
 
 	// Fall back to direct send: build a 1-hop blinded path to the
 	// destination and send via peer actor.
@@ -5440,18 +5418,9 @@ func (s *server) SendOnionMessageToDestination(ctx context.Context,
 		Receptionist: s.actorSystem.Receptionist(),
 	}
 
-	directErr := onionmessage.SendDirectToDestination(
+	return onionmessage.SendDirectToDestination(
 		ctx, cfg, directPath, finalHopTLVs, replyPath,
 	)
-	if directErr != nil {
-		srvrLog.Errorf("SendOnionMessageToDestination: direct "+
-			"send to %s failed: %v", destination, directErr)
-	} else {
-		srvrLog.Infof("SendOnionMessageToDestination: direct "+
-			"send to %s succeeded", destination)
-	}
-
-	return directErr
 }
 
 // SendOnionMessage sends a custom message to the peer with the specified
